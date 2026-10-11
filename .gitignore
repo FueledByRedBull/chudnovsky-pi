@@ -1,0 +1,8 @@
+/target/
+/.tools/
+*.exe
+*.obj
+*.log
+vcpkg_installed/
+/pi_100M.txt
+/.handoff/
