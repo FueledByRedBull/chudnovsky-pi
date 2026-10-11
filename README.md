@@ -1,28 +1,34 @@
 # chudnovsky-pi
 
 A multithreaded pi calculator in Rust. It computes 100 million decimal digits
-in under five seconds on an 8-core desktop CPU, using the Chudnovsky series
+in about five seconds on an 8-core desktop CPU, using the Chudnovsky series
 with binary splitting on top of [FLINT 3](https://flintlib.org/) and
 [GMP](https://gmplib.org/).
 
 ```text
 > pi_calc --digits 100M
-Binary splitting: 3.1s
-Final division: 0.67s
-Decimal conversion: 0.8s
-File write: 0.22s
-Total: 4.8s
+Binary splitting: 3.047s
+Final division: 0.643s
+Decimal conversion: 0.793s
+File write: 0.237s
+Total: 4.723s
 ```
 
 ## Performance
 
-Measured on a Ryzen 7 7800X3D (8 cores, 16 threads) under Windows 11.
+Measured on a Ryzen 7 7800X3D (8 cores, 16 threads) under Windows 11, ten
+runs per size, timed by the program from start to the end of the file write.
 
-| Digits | Time |
-|---|---|
-| 1 million | about 0.1 s |
-| 10 million | about 0.8 s |
-| 100 million | 4.8 s (ten runs: 4.62 to 4.92 s) |
+| Digits | Median | Fastest | Slowest |
+|---|---|---|---|
+| 10 thousand | 0.008 s | 0.007 s | 0.010 s |
+| 1 million | 0.090 s | 0.087 s | 0.093 s |
+| 10 million | 0.72 s | 0.68 s | 0.76 s |
+| 100 million | 4.99 s | 4.67 s | 5.29 s |
+
+These are not idle-machine figures: other programs were using 65 to 70% of
+the CPU during the runs. An earlier set of ten 100-million-digit runs, at
+about 59% load, ranged from 4.62 s to 4.92 s.
 
 The first version of this program took 290 s for 100 million digits.
 
@@ -117,10 +123,15 @@ for a build that runs on any x86-64 CPU.
   attempt at 1 billion digits on an earlier version aborted.
 - Windows only as it stands.
 
-## Third-party code
+## Licence
 
-`vendor/gmp-mpfr-sys` is a copy of the
+The code of this project is under the [MIT licence](LICENSE).
+
+That does not cover `vendor/gmp-mpfr-sys`, a copy of the
 [gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate, which bundles the
 GMP, MPFR and MPC sources under the LGPL. Their licence files are kept in that
 directory. FLINT (LGPL) and mimalloc (MIT) are fetched at build time and are
 not part of this repository.
+
+A built `pi_calc.exe` links GMP, MPFR and FLINT statically, so anyone who
+passes the binary on has to meet the LGPL's terms for those libraries as well.

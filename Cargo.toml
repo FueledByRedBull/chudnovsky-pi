@@ -2,6 +2,7 @@
 name = "pi_calc"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
 
 [dependencies]
 libmimalloc-sys = "0.1"
