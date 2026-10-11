@@ -119,8 +119,11 @@ for a build that runs on any x86-64 CPU.
 
 ## Limits
 
-- Tested up to 100 million digits. Larger runs are not verified, and one
-  attempt at 1 billion digits on an earlier version aborted.
+- Tested up to 700 million digits (73 s on 8 threads, 11.6 GB peak memory),
+  with the digits checked up to the 100 millionth. 1 billion digits has not
+  been run: it is expected to need about 16.5 GB of free memory.
+- Stops with an error above about 1.29 billion digits, where GMP's 32-bit bit
+  counts on Windows run out.
 - Windows only as it stands.
 
 ## Licence
@@ -130,7 +133,9 @@ The code of this project is under the [MIT licence](LICENSE).
 That does not cover `vendor/gmp-mpfr-sys`, a copy of the
 [gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate, which bundles the
 GMP, MPFR and MPC sources under the LGPL. Their licence files are kept in that
-directory. FLINT (LGPL) and mimalloc (MIT) are fetched at build time and are
+directory. One GMP file there is modified, as the LGPL asks to be stated:
+`gmp-6.3.0-c/mpz/realloc.c` (2026) allows numbers longer than 2^32 bits on
+Windows, which runs above 646 million digits need. FLINT (LGPL) and mimalloc (MIT) are fetched at build time and are
 not part of this repository.
 
 A built `pi_calc.exe` links GMP, MPFR and FLINT statically, so anyone who

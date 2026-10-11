@@ -1,4 +1,3 @@
-use rug::integer::Order;
 use rug::{Complete, Integer};
 use std::cmp::Ordering;
 use std::env;
@@ -429,17 +428,12 @@ fn binary_split(
 
 /// |value| / 2^(64 * limbs), rounded down.
 fn drop_low_limbs(value: &Integer, limbs: usize) -> Integer {
-    Integer::from_digits(
-        value.as_limbs().get(limbs..).unwrap_or_default(),
-        Order::Lsf,
-    )
+    flint::from_limbs(0, value.as_limbs().get(limbs..).unwrap_or_default())
 }
 
 /// |value| * 2^(64 * limbs).
 fn raise_limbs(value: &Integer, limbs: usize) -> Integer {
-    let mut digits = vec![0u64; limbs];
-    digits.extend_from_slice(value.as_limbs());
-    Integer::from_digits(&digits, Order::Lsf)
+    flint::from_limbs(limbs, value.as_limbs())
 }
 
 /// 2^(128 * m) / d for a positive m-limb `d`, give or take a few units. Newton's
@@ -597,13 +591,16 @@ fn write_fraction(
     let shifted = flint::mul(&fraction, &powers[level as usize - 1], threads);
     drop(fraction);
     let shifted_limbs = shifted.as_limbs();
-    let lower = Integer::from_digits(
+    let lower = flint::from_limbs(
+        0,
         shifted_limbs
             .get(dropped..limbs.min(shifted_limbs.len()))
             .unwrap_or_default(),
-        Order::Lsf,
     );
     drop(shifted);
+    // This thread's products only get smaller from here, and FLINT would keep
+    // the buffers of the largest while every level below adds its own.
+    flint::end_thread();
 
     let (out_upper, out_lower) = out.split_at_mut(out.len() / 2);
     // Twice as many products run at the next level, so each gets half the threads.
@@ -628,7 +625,7 @@ fn fixed_pi_to_digits(
     if pi_fixed.as_limbs().get(limbs..) != Some(&[3]) {
         return Err("internal error: the computed value is not pi".into());
     }
-    let fraction = Integer::from_digits(&pi_fixed.as_limbs()[..limbs], Order::Lsf);
+    let fraction = flint::from_limbs(0, &pi_fixed.as_limbs()[..limbs]);
     drop(pi_fixed);
 
     let mut digits = vec![b'0'; 1 + (conversion.chunk << conversion.levels)];
@@ -842,6 +839,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let conversion = Conversion::new(scaled_digits as usize, parallel_depth);
     // Pi is computed in binary, with this many limbs below the point.
     let limbs = conversion.limbs(conversion.levels);
+    // FLINT hands GMP the bit position of the last of them, and GMP's bit
+    // counts are 32 bits on Windows. Past that it would go wrong silently.
+    if limbs as u64 * 64 > u32::MAX as u64 {
+        return Err("too many digits: this build stops at about 1.29 billion".into());
+    }
     // Q and T matter only to three limbs beyond that.
     let keep = limbs + 3;
 
@@ -853,11 +855,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         let powers = start(scope, parallel, move || {
             let root = timed("Square root", || flint::sqrt_10005(limbs, 1));
             root_sender.send(root).expect("the division waits for the root");
+            // The root took this thread's largest products; their buffers go before
+            // the rest of the run needs the memory.
+            flint::end_thread();
             timed("Decimal powers", || conversion.powers(1))
         });
         let split = timed("Binary splitting", || {
             let sieve = smallest_odd_factors(6 * terms as u64, threads);
-            binary_split(0, terms, 0, false, parallel_depth, threads, &sieve)
+            let split = binary_split(0, terms, 0, false, parallel_depth, threads, &sieve);
+            // Likewise for the buffers of the top merges.
+            flint::end_thread();
+            split
         });
 
         let pi_fixed = timed("Final division", || {

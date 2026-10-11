@@ -107,7 +107,9 @@ pub fn start(threads: usize) {
 }
 
 /// Frees the calling thread's FFT tables, which FLINT otherwise keeps after
-/// the thread is gone. Call as a spawned thread finishes.
+/// the thread is gone. Call as a spawned thread finishes, and where a thread
+/// is done with its largest products: at a billion digits one thread's
+/// buffers and tables come to about 10 GB.
 pub fn end_thread() {
     unsafe { flint_cleanup() }
 }
@@ -116,6 +118,29 @@ pub fn end_thread() {
 /// The setting is per thread, so every entry point sets it for itself.
 fn use_threads(threads: usize) {
     unsafe { flint_reset_num_workers(threads as c_int - 1) }
+}
+
+/// The non-negative number with these limbs, least significant first, above
+/// `zeros` zero limbs. rug's `from_digits` counts in bits, which overflow
+/// GMP's 32-bit counts on Windows for numbers this program reaches.
+pub fn from_limbs(zeros: usize, limbs: &[u64]) -> Integer {
+    let used = limbs.len() - limbs.iter().rev().take_while(|&&limb| limb == 0).count();
+    let mut value = Integer::new();
+    if used == 0 {
+        return value;
+    }
+    let len = c_int::try_from(zeros + used).expect("too many limbs for GMP");
+    // SAFETY: the destination is grown to `len` limbs, all of them written
+    // here, and the top one is not zero.
+    unsafe {
+        let raw = value.as_raw_mut();
+        gmp::_mpz_realloc(raw, len as gmp::size_t);
+        let d = (*raw).d.as_ptr();
+        ptr::write_bytes(d, 0, zeros);
+        ptr::copy_nonoverlapping(limbs.as_ptr(), d.add(zeros), used);
+        (*raw).size = len;
+    }
+    value
 }
 
 /// `a * b` on up to `threads` threads (FLINT uses at most eight per product).

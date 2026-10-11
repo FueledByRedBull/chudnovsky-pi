@@ -41,7 +41,13 @@ _mpz_realloc (mpz_ptr m, mp_size_t new_alloc)
 
   if (sizeof (mp_size_t) == sizeof (int))
     {
-      if (UNLIKELY (new_alloc > ULONG_MAX / GMP_NUMB_BITS))
+      /* Changed for pi_calc (2026): upstream refuses more than
+	 ULONG_MAX / GMP_NUMB_BITS limbs here, so that every bit position fits
+	 an unsigned long. Where long has 32 bits (Windows) that caps a number
+	 at 2^32 bits, which pi_calc exceeds beyond 646 million digits. It only
+	 calls limb-counted functions on numbers that long, so the cap is the
+	 int that holds the limb count.  */
+      if (UNLIKELY (new_alloc > INT_MAX))
 	MPZ_OVERFLOW;
     }
   else
