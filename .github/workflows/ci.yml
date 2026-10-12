@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rust target
+        run: |
+          rustup toolchain install stable-x86_64-pc-windows-msvc --profile minimal
+          rustup target add x86_64-pc-windows-gnu --toolchain stable-x86_64-pc-windows-msvc
+      # The downloads and the GMP, MPFR and FLINT builds, which take most of
+      # the time. git-usr-bin is a junction into the Git install, not content.
+      - name: Cache .tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools
+            !.tools/git-usr-bin
+          key: tools-generic-${{ hashFiles('build.ps1', 'build_flint.sh', 'patches/**') }}
+      - name: Build and test
+        shell: pwsh
+        run: ./build.ps1 -Cpu generic -Test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pi_calc-generic
+          path: target/x86_64-pc-windows-gnu/release/pi_calc.exe
