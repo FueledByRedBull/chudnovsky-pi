@@ -7,9 +7,6 @@ license = "MIT"
 [dependencies]
 libmimalloc-sys = "0.1"
 mimalloc = { version = "0.1", default-features = false }
-gmp-mpfr-sys = { version = "1.7.1", default-features = false, features = ["c-no-tests", "force-cross"] }
+# use-system-libs: GMP comes from build_flint.sh, not from a build inside cargo.
+gmp-mpfr-sys = { version = "1.7.1", default-features = false, features = ["use-system-libs", "force-cross"] }
 rug = { version = "1.30.0", default-features = false, features = ["integer", "std"] }
-
-# build.ps1 creates this directory from the crates.io release plus patches/gmp-mpfr-sys-1.7.1.patch.
-[patch.crates-io]
-gmp-mpfr-sys = { path = ".tools/gmp-mpfr-sys" }

@@ -31,12 +31,18 @@ make -j"$jobs"
 # The make in w64devkit cuts a command line at 8191 characters, and the one
 # that archives libgmp.a is longer: the last objects (scanf/ and rand/ at
 # least) are left out without an error. The archive is put together here
-# from the object list of that command instead. cargo's own GMP build has the
-# same gap, so build.rs links this copy ahead of it, under another name.
+# from the object list of that command instead.
 make -n -B libgmp.la | grep -e '--mode=link' | tr ' ' '\n' | sed -n 's/\.lo$/.o/p' > objects.txt
 rm -f "$deps/lib/libgmp.a"
 ar crs "$deps/lib/libgmp.a" @objects.txt
-cp "$deps/lib/libgmp.a" "$deps/lib/libgmpfull.a"
+# gmp-mpfr-sys asks pkg-config where GMP is.
+mkdir -p "$deps/lib/pkgconfig"
+cat > "$deps/lib/pkgconfig/gmp.pc" <<EOF
+Name: gmp
+Description: GNU MP
+Version: 6.3.0
+Libs: -L$(cd "$deps/lib" && pwd -W) -lgmp
+EOF
 cp gmp.h "$deps/include/"
 
 mpfr_src=../../gmp-mpfr-sys/mpfr-4.2.2-c

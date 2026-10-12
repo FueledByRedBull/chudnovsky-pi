@@ -116,24 +116,22 @@ if (-not (Test-Path $gitUnixBin)) {
 }
 
 $env:PATH = "$gitUnixBin;$toolchainBin;$m4Bin;$env:PATH"
-# GMP CPU name: picks its hand-tuned assembly and FFT tables. zen4 matches the
-# Ryzen 7 7800X3D. "generic" leaves build_alias unset, which gives a portable
-# GMP that chooses its code at run time.
-if ($Cpu -eq "generic") {
-    Remove-Item Env:build_alias -ErrorAction SilentlyContinue
-    Remove-Item Env:ac_cv_build -ErrorAction SilentlyContinue
-} else {
-    $env:build_alias = "$Cpu-w64-mingw32"
-    $env:ac_cv_build = "$Cpu-w64-mingw32"
-}
-$env:GMP_MPFR_SYS_CACHE = "_"
+# cargo does not build GMP here: gmp-mpfr-sys looks for an installed one, and
+# finds the copy that build_flint.sh leaves in .tools/flint-deps through
+# pkg-config and the compiler's search paths.
+$deps = Join-Path $tools "flint-deps"
+$env:PKG_CONFIG_PATH = Join-Path $deps "lib/pkgconfig"
+$env:C_INCLUDE_PATH = Join-Path $deps "include"
+$env:LIBRARY_PATH = Join-Path $deps "lib"
 # Panic locations are compiled into the binary; keep local paths out of them.
 $cargoHome = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $env:USERPROFILE ".cargo" }
 # The encoded form separates flags with 0x1f, so paths may contain spaces.
 $env:CARGO_ENCODED_RUSTFLAGS = "--remap-path-prefix=$cargoHome=cargo" + [char]0x1f + "--remap-path-prefix=$root=pi_calc"
 
-# The FLINT and MPFR libraries are built once, for one CPU choice, and linking
-# needs them. The stamp records which choice.
+# GMP, MPFR and FLINT are built once, for one CPU choice. -Cpu is a GMP CPU
+# name, which picks hand-tuned assembly and FFT tables (zen4 matches the Ryzen
+# 7 7800X3D), or "generic" for a portable GMP that chooses its code at run
+# time. The stamp records the choice.
 $stamp = Join-Path $tools "flint-deps/cpu.txt"
 if (Test-Path $stamp) {
     $built = (@(Get-Content $stamp) -join "").Trim()

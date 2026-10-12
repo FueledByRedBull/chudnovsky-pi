@@ -188,14 +188,13 @@ with the reference digits in `pi_1M.txt`.
 
 The code of this project is under the [MIT licence](LICENSE).
 
-The GMP, MPFR and MPC sources are not in this repository. They come at build
+The GMP and MPFR sources are not in this repository. They come at build
 time from the [gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate,
 which bundles them under the LGPL. `patches/gmp-mpfr-sys-1.7.1.patch` holds this
-project's two changes to the crate, as the LGPL asks to be stated: its
-`build.rs` (a CPU-specific GMP build) and GMP's `mpz/realloc.c` (2026), which
-now allows numbers longer than 2^32 bits on Windows, as runs above 646 million
-digits need. FLINT (LGPL) and mimalloc (MIT) are likewise fetched at build time
-and are not part of this repository.
+project's one change to them, as the LGPL asks to be stated: GMP's
+`mpz/realloc.c` (2026) now allows numbers longer than 2^32 bits on Windows, as
+runs above 646 million digits need. FLINT (LGPL) and mimalloc (MIT) are
+likewise fetched at build time and are not part of this repository.
 
 A built `pi_calc.exe` links GMP, MPFR and FLINT statically, so anyone who
 passes the binary on has to meet the LGPL's terms for those libraries as well.
