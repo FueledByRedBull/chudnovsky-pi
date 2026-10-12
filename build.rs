@@ -9,8 +9,8 @@ fn main() {
     println!("cargo:rustc-link-lib=static=flint");
     println!("cargo:rustc-link-lib=static=mpfr");
     // The libgmp.a that gmp-mpfr-sys adds after these is missing objects (see
-    // build_flint.sh); this complete copy comes first, so the linker takes
-    // everything from it.
-    println!("cargo:rustc-link-lib=static=gmpfull");
+    // build_flint.sh). The complete copy is linked whole, so that nothing is
+    // left for the linker to look up in the other one.
+    println!("cargo:rustc-link-lib=static:+whole-archive=gmpfull");
     println!("cargo:rustc-link-lib=static=pthread");
 }

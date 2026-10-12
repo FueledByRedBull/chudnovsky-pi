@@ -165,6 +165,9 @@ By default GMP and FLINT are tuned for Zen 4. `.\build.ps1 -Cpu generic` builds
 a portable binary instead: GMP picks its code at run time, though FLINT still
 needs AVX2. Other GMP CPU names work the same way as `zen4`. One checkout holds
 one CPU choice; to switch, use a fresh checkout.
+In one comparison at 100 million digits on a Ryzen 7 7800X3D the portable
+binary took 7.81 s against 7.27 s for the tuned one (medians of six runs on 8
+threads).
 
 The binary lands in `target\x86_64-pc-windows-gnu\release\pi_calc.exe`.
 
