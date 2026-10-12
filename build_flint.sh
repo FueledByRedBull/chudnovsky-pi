@@ -1,9 +1,7 @@
 #!/bin/sh
-# Builds static MPFR and FLINT 3, the arithmetic backend of pi_calc.
-# Run by build.ps1, after its cargo build of GMP, which produces the libgmp.a
-# used here:
+# Builds static GMP, MPFR and FLINT 3, the arithmetic backend of pi_calc.
+# Run by build.ps1, which also fetches the sources into .tools:
 #   sh build_flint.sh CPU      (a GMP CPU name such as zen4, or generic)
-# build.ps1 also fetches the FLINT release into .tools/flint-src/flint-3.6.0.
 set -eu
 
 root=$(cd "$(dirname "$0")" && pwd)
@@ -19,23 +17,27 @@ build=$root/.tools/flint-src
 deps=$root/.tools/flint-deps
 jobs=$(nproc)
 
-# FLINT wants GMP and MPFR under one prefix; GMP comes from the cargo build.
-gmp_out=$(ls -td "$root"/target/x86_64-pc-windows-gnu/release/build/gmp-mpfr-sys-*/out | head -1)
+# FLINT wants GMP and MPFR under one prefix.
 mkdir -p "$deps/include" "$deps/lib"
-cp "$gmp_out/include/gmp.h" "$deps/include/"
-cp "$gmp_out/lib/libgmp.a" "$deps/lib/"
 
 # Source paths stay relative: the mingw make cannot follow MSYS absolute paths.
-#
-# On this toolchain libtool leaves the last objects (scanf/ and rand/) out of
-# libgmp.a, and FLINT references GMP's random-number functions. A second GMP
-# build supplies those objects as their own archive.
 gmp_src=../../gmp-mpfr-sys/gmp-6.3.0-c
 mkdir -p "$build/gmp-build"
 cd "$build/gmp-build"
-"$gmp_src/configure" --build=$triple --host=$triple --disable-shared --with-pic
+# A generic GMP carries code for every CPU and picks at run time.
+if [ "$cpu" = generic ]; then fat=--enable-fat; else fat=; fi
+"$gmp_src/configure" --build=$triple --host=$triple --disable-shared --with-pic $fat
 make -j"$jobs"
-ar crs "$deps/lib/libgmprand.a" rand/*.o
+# The make in w64devkit cuts a command line at 8191 characters, and the one
+# that archives libgmp.a is longer: the last objects (scanf/ and rand/ at
+# least) are left out without an error. The archive is put together here
+# from the object list of that command instead. cargo's own GMP build has the
+# same gap, so build.rs links this copy ahead of it, under another name.
+make -n -B libgmp.la | grep -e '--mode=link' | tr ' ' '\n' | sed -n 's/\.lo$/.o/p' > objects.txt
+rm -f "$deps/lib/libgmp.a"
+ar crs "$deps/lib/libgmp.a" @objects.txt
+cp "$deps/lib/libgmp.a" "$deps/lib/libgmpfull.a"
+cp gmp.h "$deps/include/"
 
 mpfr_src=../../gmp-mpfr-sys/mpfr-4.2.2-c
 mkdir -p "$build/mpfr-build"

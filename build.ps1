@@ -130,12 +130,7 @@ if (Test-Path $stamp) {
         throw "The libraries in .tools were built for '$built', not '$Cpu'. Switching needs a fresh checkout, or delete .tools/flint-deps, .tools/flint-src and target."
     }
 } else {
-    Write-Host "Building GMP"
-    cargo +stable-x86_64-pc-windows-msvc build --release --target x86_64-pc-windows-gnu -p gmp-mpfr-sys @args
-    if ($LASTEXITCODE -ne 0) {
-        throw "cargo build of GMP failed with exit code $LASTEXITCODE"
-    }
-    Write-Host "Building MPFR and FLINT"
+    Write-Host "Building GMP, MPFR and FLINT"
     sh build_flint.sh $Cpu
     if ($LASTEXITCODE -ne 0) {
         throw "build_flint.sh failed with exit code $LASTEXITCODE"
