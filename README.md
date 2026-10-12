@@ -36,7 +36,7 @@ The first version of this program took 290 s for 100 million digits.
 
 ```text
 pi_calc [--digits N[k|M|B]] [--output PATH] [--format txt|json]
-        [--guard-digits N] [--threads N]
+        [--guard-digits N] [--threads N] [--normal-priority]
 ```
 
 | Option | Default | Meaning |
@@ -46,9 +46,10 @@ pi_calc [--digits N[k|M|B]] [--output PATH] [--format txt|json]
 | `--format` | `txt` | `txt` writes `3.` and the digits; `json` wraps them with metadata. |
 | `--guard-digits` | `20` | Extra digits computed and discarded to protect the last ones. |
 | `--threads` | all logical cores | Worker threads. |
+| `--normal-priority` | off | Leave the process priority alone. |
 
-The program raises its own process priority while it runs, so other programs
-get less CPU for those few seconds.
+On Windows the program raises its own process priority while it runs, so other
+programs get less CPU for those few seconds. `--normal-priority` turns that off.
 
 ## Checking the output
 
@@ -84,7 +85,58 @@ get less CPU for those few seconds.
 Memory comes from [mimalloc](https://github.com/microsoft/mimalloc). A
 100-million-digit run peaks at about 2.7 GB.
 
+## How it got fast
+
+The first version took 290 s for 100 million digits. The changes below took
+it to about 5 s. Figures are
+for 100 million digits on 16 threads; "split" is the binary-splitting phase,
+which the total time follows.
+
+The machine was shared with other programs at 60 to 90% CPU load, and the load
+differed from step to step, so compare the two figures inside a row, not
+figures from different rows.
+
+| Change | Before -> after |
+|---|---|
+| GMP built with its Zen 4 assembly instead of with assembly disabled | about 3.2x faster |
+| Common prime factors divided out of P and Q while splitting | split 12.8 s -> about 8.5 s |
+| Sub-ranges run in parallel down to depth log2(threads) + 1 | split about 8.8 s -> 7.5 s |
+| Arithmetic moved from GMP to FLINT 3 and its multithreaded FFT | total 15.4-15.9 s -> 7.5-7.9 s |
+| Bottom of the tree summed in 64-term blocks, with no factor bookkeeping inside them | split 5.6-6.1 s -> 4.7-4.9 s |
+| Q and T of a single term kept in 128-bit integers | split 3.91 s -> 3.80 s |
+| mimalloc for Rust, GMP and FLINT allocations | split 3.80 s -> 3.53 s, total 5.97 s -> 5.65 s |
+| Pi held as a binary fixed-point number, converted to decimal by multiplication only | total 5.60 s -> 5.15 s |
+| Q carried without its powers of two | split 3.92 s -> 3.60 s, total 5.81 s -> 5.55 s |
+| Process priority raised at startup | total 6.39 s -> 5.15 s on a busy machine |
+| Sieve of smallest prime factors run in parallel | 0.13-0.19 s -> 0.01 s |
+| Karp-Markstein final division | division 0.79 s -> 0.67 s, total 4.93 s -> 4.84 s |
+
+Tried, measured and dropped because they gave nothing:
+
+- `-C target-cpu=native`: no change; the hot code is in GMP and FLINT.
+- Square root on 1, 2 or 4 threads: the stage took 4.9, 3.9 and 3.5 s, and the
+  total did not move, because the root is not on the critical path.
+- Bottom blocks of 256 to 16384 terms instead of 64: equal or slower.
+- Exact division through a 2-adic inverse on FLINT's multiply: slower at every
+  threshold tried.
+- A merge that reuses FFT transforms, written against FLINT's internals: 15 to
+  20% faster on mid-sized operands, 30 to 55% slower at the top five levels
+  under 16 threads, so no gain overall.
+- An allocation-free leaf on fixed stack buffers: single-thread leaf time
+  2.15 s -> 1.92 s, nothing at 16 threads.
+- Decimal conversion at 5 to 13 levels instead of log2(threads) + 1: no
+  difference.
+
+Memory was the obstacle above 400 million digits rather than time. Each thread
+kept the FFT buffers of its largest product while the levels below added their
+own; releasing them after each level of the decimal conversion took a
+400-million-digit run from 9.8 GB to 6.4 GB with no change in time.
+
 ## Building
+
+A prebuilt `pi_calc.exe` for any x86-64 CPU with AVX2 is on the
+[releases page](https://github.com/FueledByRedBull/chudnovsky-pi/releases).
+Building it yourself gives a binary tuned for your CPU.
 
 The build targets **Windows on x86-64 with AVX2** and is set up for one
 specific toolchain. It is not a plain `cargo build`.
@@ -94,28 +146,27 @@ You need:
 - Rust, with the `stable-x86_64-pc-windows-msvc` toolchain and the
   `x86_64-pc-windows-gnu` target.
 - [Git for Windows](https://gitforwindows.org/) in its default location.
-- [w64devkit](https://github.com/skeeto/w64devkit) unpacked to
-  `.tools/w64devkit`.
-- `m4` from [MSYS2](https://packages.msys2.org/packages/m4) unpacked so that
-  `.tools/msys-m4/usr/bin/m4.exe` exists.
-- The [FLINT 3.6.0 source](https://github.com/flintlib/flint/releases/tag/v3.6.0)
-  unpacked to `.tools/flint-src/flint-3.6.0`.
 
 Then, from the repository root:
 
 ```powershell
-.\build.ps1          # builds GMP (about 7 minutes), then fails to link
-sh build_flint.sh    # builds MPFR and FLINT (about 25 minutes); run in Git Bash
-.\build.ps1          # links pi_calc.exe
+.\build.ps1
 ```
 
-The first `build.ps1` is expected to fail at the link step: it produces the
-GMP library that `build_flint.sh` needs. Later builds only need `build.ps1`.
+The first run downloads [w64devkit](https://github.com/skeeto/w64devkit),
+[m4](https://packages.msys2.org/packages/m4), the
+[FLINT 3.6.0](https://github.com/flintlib/flint/releases/tag/v3.6.0) source and
+the [gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate into `.tools/`,
+each checked against a pinned SHA-256. It then builds GMP, MPFR and FLINT, which
+takes about half an hour, and finally `pi_calc.exe`. Later runs only rebuild
+the Rust code.
+
+By default GMP and FLINT are tuned for Zen 4. `.\build.ps1 -Cpu generic` builds
+a portable binary instead: GMP picks its code at run time, though FLINT still
+needs AVX2. Other GMP CPU names work the same way as `zen4`. One checkout holds
+one CPU choice; to switch, use a fresh checkout.
 
 The binary lands in `target\x86_64-pc-windows-gnu\release\pi_calc.exe`.
-
-`build.ps1` builds GMP for Zen 4 (`$gmpCpu = "zen4"`). Change it to `x86_64`
-for a build that runs on any x86-64 CPU.
 
 ## Limits
 
@@ -124,19 +175,22 @@ for a build that runs on any x86-64 CPU.
   been run: it is expected to need about 16.5 GB of free memory.
 - Stops with an error above about 1.29 billion digits, where GMP's 32-bit bit
   counts on Windows run out.
-- Windows only as it stands.
+- The build is Windows only. The source no longer depends on Windows, and
+  where GMP's bit counts are 64-bit the ceiling above does not apply, but no
+  other system has been built or tested.
 
 ## Licence
 
 The code of this project is under the [MIT licence](LICENSE).
 
-That does not cover `vendor/gmp-mpfr-sys`, a copy of the
-[gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate, which bundles the
-GMP, MPFR and MPC sources under the LGPL. Their licence files are kept in that
-directory. One GMP file there is modified, as the LGPL asks to be stated:
-`gmp-6.3.0-c/mpz/realloc.c` (2026) allows numbers longer than 2^32 bits on
-Windows, which runs above 646 million digits need. FLINT (LGPL) and mimalloc (MIT) are fetched at build time and are
-not part of this repository.
+The GMP, MPFR and MPC sources are not in this repository. They come at build
+time from the [gmp-mpfr-sys](https://crates.io/crates/gmp-mpfr-sys) crate,
+which bundles them under the LGPL. `patches/gmp-mpfr-sys-1.7.1.patch` holds this
+project's two changes to the crate, as the LGPL asks to be stated: its
+`build.rs` (a CPU-specific GMP build) and GMP's `mpz/realloc.c` (2026), which
+now allows numbers longer than 2^32 bits on Windows, as runs above 646 million
+digits need. FLINT (LGPL) and mimalloc (MIT) are likewise fetched at build time
+and are not part of this repository.
 
 A built `pi_calc.exe` links GMP, MPFR and FLINT statically, so anyone who
 passes the binary on has to meet the LGPL's terms for those libraries as well.
