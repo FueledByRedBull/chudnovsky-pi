@@ -760,7 +760,8 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
                 println!(
                     "Usage: pi_calc [--digits N[k|M|B]] [--output PATH] [--format txt|json] \
                      [--guard-digits N] [--threads N]\n\
-                     The output defaults to pi_<digits>.<format>, for example pi_100M.txt."
+                     The output defaults to pi_<digits>.<format>, for example pi_100M.txt.\n\
+                     The most digits this build computes is about 1.29 billion."
                 );
                 std::process::exit(0);
             }

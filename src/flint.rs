@@ -249,3 +249,23 @@ pub fn to_decimal(value: &Integer) -> String {
         digits
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_limbs_matches_the_value() {
+        assert_eq!(from_limbs(0, &[]), 0);
+        assert_eq!(from_limbs(5, &[0, 0]), 0);
+        assert_eq!(from_limbs(0, &[7]), 7);
+        // High zero limbs are dropped.
+        let value = from_limbs(0, &[7, 9, 0, 0]);
+        assert_eq!(value.as_limbs(), [7, 9]);
+        assert_eq!(value, (Integer::from(9) << 64) + 7);
+        // Zero limbs go below the given ones.
+        let raised = from_limbs(3, &[7, 9, 0]);
+        assert_eq!(raised.as_limbs(), [0, 0, 0, 7, 9]);
+        assert_eq!(raised, value << 192);
+    }
+}
