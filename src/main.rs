@@ -938,4 +938,20 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn reciprocal_is_within_a_few_units() {
+        // Just long enough for a Newton step on top of GMP's division. The
+        // end-to-end tests stop short of it: it takes about 1.26 million digits.
+        let m = NEWTON_MIN_LIMBS + 100;
+        let limbs: Vec<u64> = (1..=m as u64)
+            .map(|i| i.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
+            .collect();
+        let d = flint::from_limbs(0, &limbs);
+        assert_eq!(d.as_limbs().len(), m);
+
+        let exact = raise_limbs(&Integer::from(1), 2 * m) / &d;
+        let error = reciprocal(&d, 1) - exact;
+        assert!(error.clone().abs() < 16, "off by {error}");
+    }
 }
