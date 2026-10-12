@@ -145,7 +145,7 @@ You need:
 
 - Rust, with the `stable-x86_64-pc-windows-msvc` toolchain and the
   `x86_64-pc-windows-gnu` target.
-- [Git for Windows](https://gitforwindows.org/) in its default location.
+- [Git for Windows](https://gitforwindows.org/), with `git` on `PATH`.
 
 Then, from the repository root:
 
@@ -170,6 +170,8 @@ binary took 7.81 s against 7.27 s for the tuned one (medians of six runs on 8
 threads).
 
 The binary lands in `target\x86_64-pc-windows-gnu\release\pi_calc.exe`.
+`.\build.ps1 -Test` also runs the tests, which compare the program's output
+with the reference digits in `pi_1M.txt`.
 
 ## Limits
 

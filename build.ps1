@@ -1,4 +1,4 @@
-param([string]$Cpu = "zen4")
+param([string]$Cpu = "zen4", [switch]$Test)
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -12,10 +12,20 @@ $crateDir = Join-Path $tools "gmp-mpfr-sys"
 $gitUnixBin = Join-Path $tools "git-usr-bin"
 $tar = "$env:SystemRoot\System32\tar.exe"
 
-$gitInstallUnixBin = "C:/Program Files/Git/usr/bin"
-if (-not (Test-Path (Join-Path $gitInstallUnixBin "msys-2.0.dll"))) {
-    throw "Git for Windows MSYS runtime was not found at $gitInstallUnixBin"
+# Git for Windows brings the MSYS tools (sh, sed, patch). Its install folder is
+# the one above git.exe that holds usr/bin, wherever Git was installed.
+$git = Get-Command git.exe -ErrorAction SilentlyContinue
+if ($null -eq $git) {
+    throw "git.exe was not found on PATH; install Git for Windows"
 }
+$gitDir = Split-Path -Parent $git.Source
+while ($gitDir -and -not (Test-Path (Join-Path $gitDir "usr/bin/msys-2.0.dll"))) {
+    $gitDir = Split-Path -Parent $gitDir
+}
+if (-not $gitDir) {
+    throw "The MSYS runtime of Git for Windows was not found above $($git.Source)"
+}
+$gitInstallUnixBin = Join-Path $gitDir "usr/bin"
 
 # Downloads an archive into .tools unless it is already there, then checks its
 # SHA-256 before anything uses it. Returns the archive path.
@@ -142,4 +152,10 @@ if (Test-Path $stamp) {
 cargo +stable-x86_64-pc-windows-msvc build --release --target x86_64-pc-windows-gnu @args
 if ($LASTEXITCODE -ne 0) {
     throw "cargo build failed with exit code $LASTEXITCODE"
+}
+if ($Test) {
+    cargo +stable-x86_64-pc-windows-msvc test --release --target x86_64-pc-windows-gnu @args
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo test failed with exit code $LASTEXITCODE"
+    }
 }
