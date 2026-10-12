@@ -26,4 +26,8 @@ fn check(digits: &str, count: usize, threads: &str) {
 fn matches_reference_digits() {
     check("100k", 100_000, "2");
     check("12345", 12_345, "1");
+    // Above about 631k digits the Newton reciprocal and the approximate
+    // division replace GMP's division.
+    check("700k", 700_000, "1");
+    check("1M", 1_000_000, "3");
 }
