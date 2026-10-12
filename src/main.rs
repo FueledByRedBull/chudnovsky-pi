@@ -1,3 +1,4 @@
+use gmp_mpfr_sys::gmp::bitcnt_t;
 use rug::{Complete, Integer};
 use std::cmp::Ordering;
 use std::env;
@@ -53,6 +54,7 @@ struct Options {
     format: OutputFormat,
     guard_digits: u32,
     threads: usize,
+    normal_priority: bool,
 }
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -724,6 +726,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
     let mut format = OutputFormat::Txt;
     let mut guard_digits = 20;
     let mut threads = thread::available_parallelism().map_or(1, |count| count.get());
+    let mut normal_priority = false;
 
     let mut args = env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -756,13 +759,16 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
                     return Err("--threads must be at least 1".into());
                 }
             }
+            "--normal-priority" => normal_priority = true,
             "--help" | "-h" => {
                 println!(
                     "Usage: pi_calc [--digits N[k|M|B]] [--output PATH] [--format txt|json] \
-                     [--guard-digits N] [--threads N]\n\
-                     The output defaults to pi_<digits>.<format>, for example pi_100M.txt.\n\
-                     The most digits this build computes is about 1.29 billion."
+                     [--guard-digits N] [--threads N] [--normal-priority]\n\
+                     The output defaults to pi_<digits>.<format>, for example pi_100M.txt."
                 );
+                if std::mem::size_of::<bitcnt_t>() == 4 {
+                    println!("The most digits this build computes is about 1.29 billion.");
+                }
                 std::process::exit(0);
             }
             _ => return Err(format!("unknown argument: {arg}").into()),
@@ -779,13 +785,16 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
         format,
         guard_digits,
         threads,
+        normal_priority,
     })
 }
 
+#[cfg(windows)]
 extern "system" {
     fn GetCurrentProcess() -> *mut std::ffi::c_void;
     fn SetPriorityClass(process: *mut std::ffi::c_void, class: u32) -> i32;
 }
+#[cfg(windows)]
 const HIGH_PRIORITY_CLASS: u32 = 0x80;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -794,8 +803,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Every core is in use for the whole run, so background programs otherwise
     // take slices of it: 6.4 s against 5.2 s at 100M digits on a busy machine.
     // A refusal only costs that speed.
-    // SAFETY: plain Win32 calls on this process's own handle.
-    unsafe { SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) };
+    #[cfg(windows)]
+    if !options.normal_priority {
+        // SAFETY: plain Win32 calls on this process's own handle.
+        unsafe { SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS) };
+    }
     let scaled_digits = options
         .digits
         .checked_add(options.guard_digits)
@@ -840,9 +852,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let conversion = Conversion::new(scaled_digits as usize, parallel_depth);
     // Pi is computed in binary, with this many limbs below the point.
     let limbs = conversion.limbs(conversion.levels);
-    // FLINT hands GMP the bit position of the last of them, and GMP's bit
-    // counts are 32 bits on Windows. Past that it would go wrong silently.
-    if limbs as u64 * 64 > u32::MAX as u64 {
+    // FLINT hands GMP the bit position of the last of them. Where GMP's bit
+    // counts are 32 bits, as on Windows, it would go wrong silently past that.
+    if limbs as u64 * 64 > bitcnt_t::MAX as u64 {
         return Err("too many digits: this build stops at about 1.29 billion".into());
     }
     // Q and T matter only to three limbs beyond that.
