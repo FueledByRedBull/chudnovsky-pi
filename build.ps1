@@ -13,12 +13,13 @@ $gitUnixBin = Join-Path $tools "git-usr-bin"
 $tar = "$env:SystemRoot\System32\tar.exe"
 
 # Git for Windows brings the MSYS tools (sh, sed, patch). Its install folder is
-# the one above git.exe that holds usr/bin, wherever Git was installed.
+# the one that holds usr/bin, above the folder of Git's own programs. Asking
+# git for that folder also works where git.exe on PATH is only a shim.
 $git = Get-Command git.exe -ErrorAction SilentlyContinue
 if ($null -eq $git) {
     throw "git.exe was not found on PATH; install Git for Windows"
 }
-$gitDir = Split-Path -Parent $git.Source
+$gitDir = & $git.Source --exec-path
 while ($gitDir -and -not (Test-Path (Join-Path $gitDir "usr/bin/msys-2.0.dll"))) {
     $gitDir = Split-Path -Parent $gitDir
 }
